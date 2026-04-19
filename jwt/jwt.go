@@ -6,19 +6,18 @@ import (
     "time"
 
     "github.com/golang-jwt/jwt/v5"
-    "github.com/google/uuid"
 )
 
 type TokenInfo struct {
-    UserID uuid.UUID
+    UserID string
     Role   string
     Valid  bool
 }
 
 type userClaims struct {
     jwt.RegisteredClaims
-    UserID uuid.UUID `json:"user_id"`
-    Role   string    `json:"role"`
+    UserID string `json:"user_id"`
+    Role   string `json:"role"`
 }
 
 type JWTManager struct {
@@ -51,7 +50,7 @@ func NewManager(
 }
 
 func (m *JWTManager) Generate(
-    userID uuid.UUID,
+    userID string,
     role string,
     duration time.Duration,
 ) (string, error) {

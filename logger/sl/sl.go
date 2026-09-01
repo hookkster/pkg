@@ -1,6 +1,7 @@
 package sl
 
 import (
+	"io"
 	"log/slog"
 	"os"
 
@@ -28,18 +29,26 @@ type Config struct {
 	// Version is attached to every record. Pass the git tag or short SHA the
 	// binary was built from, so you can tell which build produced a line.
 	Version string
+
+	// Output defaults to os.Stdout. Override it in tests.
+	Output io.Writer
 }
 
 func NewLogger(cfg Config) *slog.Logger {
 	var handler slog.Handler
+
+	out := cfg.Output
+	if out == nil {
+		out = os.Stdout
+	}
  
 	if cfg.Env == EnvLocal {
 		opts := slogpretty.PrettyHandlerOptions{
 			SlogOpts: &slog.HandlerOptions{Level: slog.LevelDebug},
 		}
-		handler = opts.NewPrettyHandler(os.Stdout)
+		handler = opts.NewPrettyHandler(out)
 	} else {
-		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		handler = slog.NewJSONHandler(out, &slog.HandlerOptions{
 			Level: slog.LevelInfo,
 		})
 	}

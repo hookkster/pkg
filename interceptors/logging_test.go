@@ -11,6 +11,7 @@ import (
 	"github.com/hookkster/pkg/logger/sl"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -105,5 +106,70 @@ func TestUnaryLoggingRecordsErrorCode(t *testing.T) {
 
 	if record["level"] != "WARN" {
 		t.Errorf("level = %v, want WARN", record["level"])
+	}
+}
+
+func TestUnaryLoggingGererateAndGetTraceId(t *testing.T) {
+	handler := func(ctx context.Context, _ any) (any, error) {
+		traceID := sl.TraceID(ctx)
+
+		return traceID, nil
+	}
+
+	info := &grpc.UnaryServerInfo{FullMethod: "/auth.v1.AuthService/SendOTP"}
+
+	buf := &bytes.Buffer{}
+	log := sl.NewLogger(sl.Config{Env: sl.EnvProd, Output: buf})
+
+	interceptor := interceptors.UnaryLogging(log)
+
+	resp, _ := interceptor(context.Background(), nil, info, handler)
+
+	var record map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &record); err != nil {
+		t.Fatalf("invalid json: %v (%q)", err, buf.String())
+	}
+
+	id, ok := record["trace_id"].(string)
+	if !ok || id == "" {
+		t.Errorf("trace_id = %v, want non-empty string", record["trace_id"])
+	}
+
+	if id != resp {
+		t.Errorf("log trace_id = %v, handler saw %v", id, resp)
+	}
+}
+
+func TestUnaryLoggingReusesIncomingTraceID(t *testing.T) {
+	handler := func(ctx context.Context, _ any) (any, error) {
+		traceID := sl.TraceID(ctx)
+
+		return traceID, nil
+	}
+
+	info := &grpc.UnaryServerInfo{FullMethod: "/auth.v1.AuthService/SendOTP"}
+
+	buf := &bytes.Buffer{}
+	log := sl.NewLogger(sl.Config{Env: sl.EnvProd, Output: buf})
+
+	interceptor := interceptors.UnaryLogging(log)
+
+	ctx := metadata.NewIncomingContext(
+		context.Background(),
+		metadata.Pairs(interceptors.TraceIDKey, "incoming-id"),
+	)
+	resp, _ := interceptor(ctx, nil, info, handler)
+
+	var record map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &record); err != nil {
+		t.Fatalf("invalid json: %v (%q)", err, buf.String())
+	}
+
+	if record["trace_id"] != "incoming-id" {
+		t.Errorf("trace_id = %v, want incoming-id", record["trace_id"])
+	}
+
+	if resp != "incoming-id" {
+		t.Errorf("handler saw %v, want incoming-id", resp)
 	}
 }

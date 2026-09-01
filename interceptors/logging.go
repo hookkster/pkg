@@ -75,11 +75,11 @@ func TraceIDFromContext(ctx context.Context) string {
 	if !ok {
 		return ""
 	}
-	
+
 	values := md.Get(TraceIDKey)
 	if len(values) == 0 {
 		return ""
-	} 
+	}
 
 	return values[0]
 }

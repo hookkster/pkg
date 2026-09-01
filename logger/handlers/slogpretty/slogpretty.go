@@ -2,10 +2,10 @@ package slogpretty
 
 import (
 	"context"
-	"log/slog"
 	"encoding/json"
 	"io"
 	stdLog "log"
+	"log/slog"
 
 	"github.com/fatih/color"
 )

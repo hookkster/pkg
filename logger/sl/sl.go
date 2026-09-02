@@ -1,6 +1,7 @@
 package sl
 
 import (
+	"io"
 	"log/slog"
 	"os"
 
@@ -20,32 +21,40 @@ type Config struct {
 	// quietly writes ANSI escapes into a log shipper is far harder to notice
 	// than one that writes JSON on your laptop.
 	Env string
- 
+
 	// Service is attached to every record. Once several services write into
 	// one index, this is the first thing you filter on.
 	Service string
- 
+
 	// Version is attached to every record. Pass the git tag or short SHA the
 	// binary was built from, so you can tell which build produced a line.
 	Version string
+
+	// Output defaults to os.Stdout. Override it in tests.
+	Output io.Writer
 }
 
 func NewLogger(cfg Config) *slog.Logger {
 	var handler slog.Handler
- 
+
+	out := cfg.Output
+	if out == nil {
+		out = os.Stdout
+	}
+
 	if cfg.Env == EnvLocal {
 		opts := slogpretty.PrettyHandlerOptions{
 			SlogOpts: &slog.HandlerOptions{Level: slog.LevelDebug},
 		}
-		handler = opts.NewPrettyHandler(os.Stdout)
+		handler = opts.NewPrettyHandler(out)
 	} else {
-		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		handler = slog.NewJSONHandler(out, &slog.HandlerOptions{
 			Level: slog.LevelInfo,
 		})
 	}
- 
+
 	log := slog.New(&contextHandler{Handler: handler})
- 
+
 	attrs := make([]any, 0, 3)
 	if cfg.Service != "" {
 		attrs = append(attrs, slog.String("service", cfg.Service))
@@ -59,7 +68,7 @@ func NewLogger(cfg Config) *slog.Logger {
 	if len(attrs) > 0 {
 		log = log.With(attrs...)
 	}
- 
+
 	return log
 }
 
@@ -70,6 +79,6 @@ func Err(err error) slog.Attr {
 	if err == nil {
 		return slog.String("error", "")
 	}
- 
+
 	return slog.String("error", err.Error())
 }

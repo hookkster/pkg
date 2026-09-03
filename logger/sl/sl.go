@@ -4,6 +4,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/hookkster/pkg/logger/handlers/slogpretty"
 )
@@ -81,4 +82,44 @@ func Err(err error) slog.Attr {
 	}
 
 	return slog.String("error", err.Error())
+}
+
+func Identifier(v string) slog.Attr {
+	return slog.String("identifier", Mask(v))
+}
+
+func Masked(key, v string) slog.Attr {
+	return slog.String(key, Mask(v))
+}
+
+func Mask(v string) string {
+	if v == "" {
+		return v
+	}
+
+	if strings.Contains(v, "@") {
+		return maskEmail(v)
+	}
+
+	return maskPhone(v)
+}
+
+func maskEmail(v string) string {
+	index := strings.LastIndex(v, "@")
+	local := v[:index]
+	if len(local) <= 1 {
+		return strings.Repeat("*", len(local)) + v[index:]
+	}
+
+	mask := strings.Repeat("*", index - 1)
+
+	return v[:1] + mask + v[index:]
+}
+
+func maskPhone(v string) string {
+	if len(v) <= 4 {
+		return strings.Repeat("*", len(v))
+	}
+
+	return v[:2] + strings.Repeat("*", len(v)-4) + v[len(v)-2:]
 }

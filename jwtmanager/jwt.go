@@ -2,22 +2,30 @@ package jwtmanager
 
 import (
 	"crypto/rsa"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
+type TokenType string
+
+const (
+	TokenAccess  TokenType = "access"
+	TokenRefresh TokenType = "refresh"
+)
+
 type TokenInfo struct {
 	UserID string
 	Role   string
-	Valid  bool
 }
 
 type userClaims struct {
 	jwt.RegisteredClaims
-	UserID string `json:"user_id"`
-	Role   string `json:"role"`
+	UserID    string    `json:"user_id"`
+	Role      string    `json:"role"`
+	TokenType TokenType `json:"typ"`
 }
 
 type JWTManager struct {
@@ -52,10 +60,11 @@ func NewManager(
 func (m *JWTManager) Generate(
 	userID string,
 	role string,
+	tokenType TokenType,
 	duration time.Duration,
 ) (string, error) {
 	if m.privateKey == nil {
-		return "", fmt.Errorf("private key is not set, cannot generate token")
+		return "", ErrNoPrivateKey
 	}
 
 	claims := userClaims{
@@ -63,8 +72,9 @@ func (m *JWTManager) Generate(
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(duration)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
-		UserID: userID,
-		Role:   role,
+		UserID:    userID,
+		Role:      role,
+		TokenType: tokenType,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
@@ -78,15 +88,16 @@ func (m *JWTManager) Generate(
 
 func (m *JWTManager) Verify(
 	tokenStr string,
+	expected TokenType,
 ) (TokenInfo, error) {
 	if m.publicKey == nil {
-		return TokenInfo{Valid: false}, fmt.Errorf("public key is not set, cannot verify token")
+		return TokenInfo{}, ErrNoPublicKey
 	}
 
 	t, err := jwt.ParseWithClaims(
 		tokenStr,
 		&userClaims{},
-		func(t *jwt.Token) (interface{}, error) {
+		func(t *jwt.Token) (any, error) {
 			if _, ok := t.Method.(*jwt.SigningMethodRSA); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 			}
@@ -95,17 +106,28 @@ func (m *JWTManager) Verify(
 	)
 
 	if err != nil {
-		return TokenInfo{Valid: false}, fmt.Errorf("token verification failed: %w", err)
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return TokenInfo{}, ErrTokenExpired
+		}
+
+		if errors.Is(err, jwt.ErrTokenSignatureInvalid) {
+			return TokenInfo{}, ErrInvalidSignature
+		}
+
+		return TokenInfo{}, fmt.Errorf("token verification failed: %w", err)
 	}
 
 	claims, ok := t.Claims.(*userClaims)
 	if !ok || !t.Valid {
-		return TokenInfo{Valid: false}, fmt.Errorf("invalid token claims")
+		return TokenInfo{}, ErrInvalidToken
+	}
+
+	if expected != claims.TokenType {
+		return TokenInfo{}, ErrWrongTokenType
 	}
 
 	return TokenInfo{
 		UserID: claims.UserID,
 		Role:   claims.Role,
-		Valid:  true,
 	}, nil
 }

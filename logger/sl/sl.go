@@ -111,7 +111,7 @@ func maskEmail(v string) string {
 		return strings.Repeat("*", len(local)) + v[index:]
 	}
 
-	mask := strings.Repeat("*", index - 1)
+	mask := strings.Repeat("*", index-1)
 
 	return v[:1] + mask + v[index:]
 }
